@@ -50,6 +50,19 @@ with `-NoCache`. The equivalent direct Docker command is:
 docker compose up --build --remove-orphans
 ```
 
+## CI/CD
+
+GitHub Actions runs the locked dependency install, backend test suite, and a
+Docker build for every pull request. A push to `main` or a `v*` tag additionally
+publishes the image to GitHub Container Registry as `ghcr.io/<owner>/<repo>`.
+
+The workflow uses the repository-scoped `GITHUB_TOKEN`; no registry secret is
+needed. In repository settings, allow GitHub Actions workflows **Read and write
+permissions** so the `packages: write` publish job can create or update the
+package. Deploying the published image is intentionally left to the target
+environment because this repository does not define a cloud host or deployment
+credentials.
+
 ## What is implemented
 
 - Three independent AMR agents exchange heartbeat, intent, and short-lived corridor lease messages.

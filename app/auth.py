@@ -110,7 +110,11 @@ async def current_identity(request: Request, token: str | None = Depends(oauth2_
     if not settings.auth_required:
         return Identity(subject="local-development", email="local@edgefleet", roles=frozenset({"admin", "operator", "viewer", "fleet-agent"}))
     if not token:
-        return Identity(subject="00000000-0000-0000-0000-000000000000", email="guest@edgefleet.local", roles=frozenset({"viewer"}))
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     database: Database = request.app.state.database
     return await resolve_identity(database, request.app.state.token_service, token)
 
