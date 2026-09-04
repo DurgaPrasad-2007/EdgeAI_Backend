@@ -1,5 +1,7 @@
 # SIH26123 — EdgeFleet
 
+> PPT-ready research citations, implementation references, attribution text, and compact slide copy are available in [`SIH_PPT_REFERENCES.md`](SIH_PPT_REFERENCES.md).
+
 **Problem statement:** SIH26123, *Edge-AI Based Distributed Fleet Coordination for Autonomous Mobile Robots (AMRs) in Smart Warehouses*  
 **Organisation / theme:** Bharat Electronics Limited / Smart Automation  
 **Submission position:** software-first, local-edge architecture for at least three AMRs. This document is an accurate technical disclosure, not a claim of certified autonomous operation.
