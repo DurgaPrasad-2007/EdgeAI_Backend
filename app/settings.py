@@ -42,6 +42,12 @@ class Settings:
                 raise RuntimeError("Production requires DATABASE_URL using an async PostgreSQL driver.")
             if not auth_required or len(jwt_secret.encode()) < 32:
                 raise RuntimeError("Production requires AUTH_REQUIRED=true and JWT_SECRET of at least 256 bits.")
+            if not os.getenv("EDGEFLEET_ALLOWED_ORIGINS", "").strip():
+                raise RuntimeError("Production requires EDGEFLEET_ALLOWED_ORIGINS.")
+            configured_hosts = os.getenv("EDGEFLEET_ALLOWED_HOSTS", "").strip()
+            render_hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME", "").strip()
+            if not configured_hosts and not render_hostname:
+                raise RuntimeError("Production requires EDGEFLEET_ALLOWED_HOSTS or RENDER_EXTERNAL_HOSTNAME.")
         return cls(
             environment=environment,
             database_url=database_url,

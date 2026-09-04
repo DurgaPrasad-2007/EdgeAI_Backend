@@ -50,7 +50,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="EdgeFleet Local API", version="0.2.0", description="Local telemetry, task, and evidence API. It is never a robot motion controller.", lifespan=lifespan, docs_url="/docs", redoc_url=None)
 
 # Browser origins are explicit, never reflected from the request.
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=[host.strip() for host in os.getenv("EDGEFLEET_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver").split(",") if host.strip()])
+def allowed_hosts() -> list[str]:
+    configured_hosts = os.getenv("EDGEFLEET_ALLOWED_HOSTS", "")
+    if not configured_hosts and os.getenv("EDGEFLEET_ENV", "development").strip().lower() != "production":
+        configured_hosts = "localhost,127.0.0.1,testserver"
+    hosts = [host.strip() for host in configured_hosts.split(",") if host.strip()]
+    # Render supplies its public onrender.com hostname at runtime. Include only
+    # that exact host; custom domains must remain explicitly configured.
+    render_hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME", "").strip()
+    if render_hostname:
+        hosts.append(render_hostname)
+    return list(dict.fromkeys(hosts))
+
+
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts())
 app.add_middleware(CORSMiddleware, allow_origins=[origin.strip() for origin in os.getenv("EDGEFLEET_ALLOWED_ORIGINS", "http://localhost:3000").split(",") if origin.strip()], allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["Authorization", "Content-Type", "X-Request-ID"])
 
 

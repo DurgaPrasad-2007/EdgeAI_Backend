@@ -73,6 +73,11 @@ set. Configure every value from `.env.production.example` in the Render
 dashboard—especially `DATABASE_URL`, `JWT_SECRET`, `EDGEFLEET_ALLOWED_HOSTS`,
 and `EDGEFLEET_ALLOWED_ORIGINS`. Do not upload `.env`.
 
+Render's automatic `RENDER_EXTERNAL_HOSTNAME` is accepted by the backend. Add
+any custom API domain explicitly to `EDGEFLEET_ALLOWED_HOSTS`. Production
+startup fails immediately if its required database, secret, CORS, or host
+configuration is absent.
+
 ## What is implemented
 
 - Three independent AMR agents exchange heartbeat, intent, and short-lived corridor lease messages.
