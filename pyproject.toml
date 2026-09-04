@@ -1,0 +1,25 @@
+[project]
+name = "edgefleet-api"
+version = "0.1.0"
+description = "Local FastAPI telemetry and simulation API for the EdgeFleet AMR prototype."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.133,<0.134",
+    "pydantic>=2.13,<3",
+    "SQLAlchemy>=2.0.48,<3",
+    "alembic>=1.18,<2",
+    "aiosqlite>=0.22,<1",
+    "asyncpg>=0.31,<1",
+    "pgvector>=0.4,<1",
+    "pwdlib[argon2]>=0.3,<1",
+    "PyJWT[crypto]>=2.12,<3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0,<9",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

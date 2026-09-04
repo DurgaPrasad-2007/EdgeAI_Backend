@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: edgefleet-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - EDGEFLEET_ENV=production
+    env_file:
+      - ./backend/.env
+    networks:
+      - edgefleet-network
+
+networks:
+  edgefleet-network:
+    name: edgefleet-net
