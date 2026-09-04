@@ -1,0 +1,12 @@
+.git
+.venv
+.pytest_cache
+__pycache__
+*.py[cod]
+.env
+data
+tests
+docs
+README.md
+SECURITY_COMPLIANCE.md
+SIH26123_SUBMISSION.md

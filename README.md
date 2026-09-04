@@ -34,6 +34,22 @@ The controls are functional: sign in, run/pause the local twin, inject a blockag
 
 The FastAPI OpenAPI console is available at `http://localhost:8000/docs`.
 
+## Run with Docker
+
+From the backend directory, this command builds the image when needed and starts
+the API:
+
+```powershell
+.\scripts\docker-up.ps1
+```
+
+Run it in the background with `-Detached`; force a clean dependency/image rebuild
+with `-NoCache`. The equivalent direct Docker command is:
+
+```powershell
+docker compose up --build --remove-orphans
+```
+
 ## What is implemented
 
 - Three independent AMR agents exchange heartbeat, intent, and short-lived corridor lease messages.
