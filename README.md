@@ -63,6 +63,16 @@ package. Deploying the published image is intentionally left to the target
 environment because this repository does not define a cloud host or deployment
 credentials.
 
+### Render
+
+Create a **Docker** web service with this repository as its root directory and
+leave Render's build and start command fields empty so it uses the Dockerfile.
+Set the health-check path to `/health/live`. Render supplies `PORT`
+automatically; the Gunicorn configuration uses it unless `BIND` is explicitly
+set. Configure every value from `.env.production.example` in the Render
+dashboard—especially `DATABASE_URL`, `JWT_SECRET`, `EDGEFLEET_ALLOWED_HOSTS`,
+and `EDGEFLEET_ALLOWED_ORIGINS`. Do not upload `.env`.
+
 ## What is implemented
 
 - Three independent AMR agents exchange heartbeat, intent, and short-lived corridor lease messages.

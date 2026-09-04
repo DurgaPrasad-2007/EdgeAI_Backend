@@ -4,7 +4,9 @@ import multiprocessing
 import os
 
 # Server socket
-bind = os.getenv("BIND", "0.0.0.0:8000")
+# Render assigns the listening port through PORT. BIND remains available for
+# local/container overrides, while Docker continues to default to port 8000.
+bind = os.getenv("BIND", f"0.0.0.0:{os.getenv('PORT', '8000')}")
 backlog = 2048
 
 # Worker processes: standard (2 * CPU) + 1, capped between 2 and 8 by default
