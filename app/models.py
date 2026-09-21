@@ -5,7 +5,7 @@ from typing import Any
 import uuid
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, Integer, JSON, String, Text, Uuid
+from sqlalchemy import DateTime, Float, Integer, JSON, String, Text, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -25,6 +25,9 @@ class TaskModel(Base):
     destination: Mapped[str] = mapped_column(String(64), nullable=False)
     priority: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False)
+    payload_kg: Mapped[float] = mapped_column(Float, default=150.0, nullable=False)
+    payload_size: Mapped[str] = mapped_column(String(32), default="medium", nullable=False)
+    urgency: Mapped[str] = mapped_column(String(32), default="standard", nullable=False)
     assigned_robot_id: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 

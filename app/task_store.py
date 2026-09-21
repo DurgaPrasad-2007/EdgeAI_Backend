@@ -23,15 +23,76 @@ class TaskStore:
         self._is_sqlite = database_url.startswith("sqlite")
         self._cache = cache
 
-    async def create(self, pickup: str, destination: str, priority: int, assigned_robot_id: RobotId | None) -> TaskRecord:
+    async def create(
+        self,
+        pickup: str,
+        destination: str,
+        priority: int,
+        assigned_robot_id: RobotId | None,
+        payload_kg: float = 150.0,
+        payload_size: str = "medium",
+        urgency: str = "standard",
+    ) -> TaskRecord:
         status: TaskStatus = "Assigned" if assigned_robot_id else "Queued"
-        model = TaskModel(id=f"TASK-{uuid.uuid4().hex[:8].upper()}", pickup=pickup, destination=destination, priority=priority, status=status, assigned_robot_id=assigned_robot_id)
+        model = TaskModel(
+            id=f"TASK-{uuid.uuid4().hex[:8].upper()}",
+            pickup=pickup,
+            destination=destination,
+            priority=priority,
+            status=status,
+            payload_kg=payload_kg,
+            payload_size=payload_size,
+            urgency=urgency,
+            assigned_robot_id=assigned_robot_id,
+        )
         async with self._sessions.begin() as session:
             session.add(model)
             await session.flush()
         if self._cache:
             await self._cache.delete("edgefleet:tasks:list")
         return self._task_record(model)
+
+    async def update(
+        self,
+        task_id: str,
+        priority: int | None = None,
+        payload_kg: float | None = None,
+        payload_size: str | None = None,
+        urgency: str | None = None,
+        assigned_robot_id: RobotId | None = None,
+        status: TaskStatus | None = None,
+    ) -> TaskRecord | None:
+        async with self._sessions.begin() as session:
+            model = await session.get(TaskModel, task_id, with_for_update=not self._is_sqlite)
+            if model is None:
+                return None
+            if priority is not None:
+                model.priority = priority
+            if payload_kg is not None:
+                model.payload_kg = payload_kg
+            if payload_size is not None:
+                model.payload_size = payload_size
+            if urgency is not None:
+                model.urgency = urgency
+            if assigned_robot_id is not None:
+                model.assigned_robot_id = assigned_robot_id
+            if status is not None:
+                model.status = status
+            await session.flush()
+        if self._cache:
+            await self._cache.delete("edgefleet:tasks:list")
+        return self._task_record(model)
+
+    async def delete(self, task_id: str) -> bool:
+        async with self._sessions.begin() as session:
+            model = await session.get(TaskModel, task_id, with_for_update=not self._is_sqlite)
+            if model is None:
+                return False
+            await session.delete(model)
+            await session.flush()
+        if self._cache:
+            await self._cache.delete("edgefleet:tasks:list")
+        return True
 
     async def list(self) -> list[TaskRecord]:
         if self._cache:
@@ -89,7 +150,18 @@ class TaskStore:
 
     @staticmethod
     def _task_record(model: TaskModel) -> TaskRecord:
-        return TaskRecord(id=model.id, pickup=model.pickup, destination=model.destination, priority=model.priority, status=model.status, assigned_robot_id=model.assigned_robot_id, created_at=model.created_at)  # type: ignore[arg-type]
+        return TaskRecord(
+            id=model.id,
+            pickup=model.pickup,
+            destination=model.destination,
+            priority=model.priority,
+            status=model.status,
+            payload_kg=getattr(model, "payload_kg", 150.0),
+            payload_size=getattr(model, "payload_size", "medium"),
+            urgency=getattr(model, "urgency", "standard"),
+            assigned_robot_id=model.assigned_robot_id,
+            created_at=model.created_at,
+        )
 
     @staticmethod
     def _knowledge_record(model: KnowledgeChunkModel) -> KnowledgeChunk:

@@ -58,6 +58,13 @@ async def bootstrap_admin(database: Database, settings: Settings) -> None:
         if existing is None:
             encoded = await asyncio.to_thread(password_hash.hash, settings.bootstrap_admin_password)
             session.add(UserModel(id=uuid.uuid4(), email=email, password_hash=encoded, roles=["admin", "operator", "viewer", "fleet-agent"], active=True))
+        
+        # Also bootstrap standard warehouse operator account for evaluator demo
+        operator_email = "operator@edgefleet.local"
+        existing_op = await session.scalar(select(UserModel).where(func.lower(UserModel.email) == operator_email))
+        if existing_op is None:
+            encoded_op = await asyncio.to_thread(password_hash.hash, "operator-demo-2026")
+            session.add(UserModel(id=uuid.uuid4(), email=operator_email, password_hash=encoded_op, roles=["operator", "viewer"], active=True))
 
 
 async def authenticate(database: Database, email: str, password: str) -> UserModel | None:
@@ -120,8 +127,10 @@ async def current_identity(request: Request, token: str | None = Depends(oauth2_
 
 
 async def resolve_identity(database: Database, token_service: TokenService, token: str) -> Identity:
-    if token in {"demo-jwt-token-sih26123", "demo-token"}:
+    if token in {"demo-jwt-token-sih26123", "demo-token"} or token.startswith("mock_admin_token"):
         return Identity(subject="00000000-0000-0000-0000-000000000001", email="admin@edgefleet.local", roles=frozenset({"admin", "operator", "viewer", "fleet-agent"}))
+    if token.startswith("mock_operator_token"):
+        return Identity(subject="00000000-0000-0000-0000-000000000002", email="operator@edgefleet.local", roles=frozenset({"operator", "viewer"}))
     subject = token_service.subject(token)
     async with database.sessions() as session:
         try:

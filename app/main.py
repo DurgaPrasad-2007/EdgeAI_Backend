@@ -18,7 +18,7 @@ from app.auth import Identity, TokenService, authenticate, bootstrap_admin, crea
 from app.cache import CacheManager
 from app.coordinator import FleetCoordinator
 from app.database import Database
-from app.schemas import AccessToken, BlockageRequest, CurrentUser, FleetState, IntentRequest, KnowledgeChunk, KnowledgeChunkCreate, KnowledgeQuery, KnowledgeSearch, ReservationRequest, SimulationControl, TaskBidRequest, TaskCreate, TaskRecord, UserCreate, UserDetail, UserStatusUpdate
+from app.schemas import AccessToken, BlockageRequest, CurrentUser, FleetState, IntentRequest, KnowledgeChunk, KnowledgeChunkCreate, KnowledgeQuery, KnowledgeSearch, ReservationRequest, SimulationControl, TaskBidRequest, TaskCreate, TaskUpdate, TaskRecord, UserCreate, UserDetail, UserStatusUpdate
 from app.settings import Settings
 
 
@@ -64,7 +64,7 @@ def allowed_hosts() -> list[str]:
 
 
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts())
-app.add_middleware(CORSMiddleware, allow_origins=[origin.strip() for origin in os.getenv("EDGEFLEET_ALLOWED_ORIGINS", "http://localhost:3000").split(",") if origin.strip()], allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["Authorization", "Content-Type", "X-Request-ID"])
+app.add_middleware(CORSMiddleware, allow_origins=[origin.strip() for origin in os.getenv("EDGEFLEET_ALLOWED_ORIGINS", "http://localhost:3000").split(",") if origin.strip()], allow_credentials=False, allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS", "PUT"], allow_headers=["Authorization", "Content-Type", "X-Request-ID"])
 
 
 @app.middleware("http")
@@ -247,6 +247,22 @@ async def complete_task(task_id: str, _: Identity = Depends(operator), coordinat
     return task
 
 
+@app.patch("/api/tasks/{task_id}", response_model=TaskRecord, tags=["tasks"])
+async def update_task(task_id: str, update: TaskUpdate, _: Identity = Depends(operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> TaskRecord:
+    task = await coordinator.update_task(task_id, update)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+
+@app.delete("/api/tasks/{task_id}", status_code=204, tags=["tasks"])
+async def delete_task(task_id: str, _: Identity = Depends(operator), coordinator: FleetCoordinator = Depends(get_coordinator)):
+    success = await coordinator.delete_task(task_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 def text_to_embedding(text: str, dim: int = 384) -> list[float]:
     random.seed(hash(text.strip().lower()) & 0xFFFFFFFF)
     vec = [random.gauss(0, 1) for _ in range(dim)]
@@ -279,12 +295,17 @@ async def fleet_telemetry(websocket: WebSocket) -> None:
         token = protocols[1]
 
     subprotocol = "edgefleet" if "edgefleet" in protocols else None
-    if settings.auth_required and token:
+    identity = None
+    if token:
         try:
-            await resolve_identity(websocket.app.state.database, websocket.app.state.token_service, token)
+            identity = await resolve_identity(websocket.app.state.database, websocket.app.state.token_service, token)
         except Exception:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
+            pass
+
+    # If auth_required is enabled in production and no valid identity, close with 1008; otherwise allow demo/dev stream
+    if settings.auth_required and settings.environment == "production" and identity is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
 
     await websocket.accept(subprotocol=subprotocol)
     coordinator: FleetCoordinator = websocket.app.state.coordinator

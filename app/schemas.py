@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, EmailStr, Field
 
 RobotId = Literal["AMR-01", "AMR-02", "AMR-03"]
-RobotStatus = Literal["Moving", "Yielding", "Rerouting", "Task handoff", "Charging"]
+RobotStatus = Literal["Idle", "Moving", "Yielding", "Rerouting", "Task handoff", "Charging", "Blocked"]
 EventType = Literal["LEASE", "INTENT", "REROUTE", "HANDOFF", "HEARTBEAT"]
 
 
@@ -82,6 +82,18 @@ class TaskCreate(BaseModel):
     pickup: str = Field(min_length=1, max_length=64)
     destination: str = Field(min_length=1, max_length=64)
     priority: int = Field(default=50, ge=1, le=100)
+    payload_kg: float = Field(default=150.0, ge=1.0, le=2000.0)
+    payload_size: Literal["small", "medium", "heavy", "pallet"] = Field(default="medium")
+    urgency: Literal["low", "standard", "critical"] = Field(default="standard")
+
+
+class TaskUpdate(BaseModel):
+    priority: int | None = Field(default=None, ge=1, le=100)
+    payload_kg: float | None = Field(default=None, ge=1.0, le=2000.0)
+    payload_size: Literal["small", "medium", "heavy", "pallet"] | None = None
+    urgency: Literal["low", "standard", "critical"] | None = None
+    assigned_robot_id: RobotId | None = None
+    status: TaskStatus | None = None
 
 
 class TaskRecord(BaseModel):
@@ -90,6 +102,9 @@ class TaskRecord(BaseModel):
     destination: str
     priority: int = Field(ge=1, le=100)
     status: TaskStatus
+    payload_kg: float = 150.0
+    payload_size: Literal["small", "medium", "heavy", "pallet"] = "medium"
+    urgency: Literal["low", "standard", "critical"] = "standard"
     assigned_robot_id: RobotId | None = None
     created_at: datetime
 
