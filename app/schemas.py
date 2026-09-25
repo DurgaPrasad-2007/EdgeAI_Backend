@@ -5,9 +5,13 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
-RobotId = Literal["AMR-01", "AMR-02", "AMR-03"]
+# Robots are data (see graph.ROBOT_FLEET); ids are validated against the live fleet, not a Literal.
+RobotId = str
 RobotStatus = Literal["Idle", "Moving", "Yielding", "Rerouting", "Task handoff", "Charging", "Blocked"]
+RobotLeg = Literal["idle", "to_pickup", "to_drop", "to_home", "to_charge"]
 EventType = Literal["LEASE", "INTENT", "REROUTE", "HANDOFF", "HEARTBEAT"]
+P2PType = Literal["MUTEX_REQ", "MUTEX_GRANT", "YIELD_ACK", "OBSTACLE_ALERT", "TASK_BID", "HEARTBEAT"]
+TaskStatus = Literal["Queued", "Assigned", "In Progress", "Completed", "Blocked"]
 
 
 class Point(BaseModel):
@@ -22,31 +26,87 @@ class RobotState(BaseModel):
     battery: float = Field(ge=0, le=100)
     status: RobotStatus
     task: str
+    task_id: str | None = None
+    leg: RobotLeg = "idle"
+    target: str | None = None
     priority: int = Field(ge=0, le=100)
     path: list[Point]
     path_index: int = Field(ge=0)
     progress: float = Field(ge=0, lt=1)
     position: Point
     completed: int = Field(ge=0)
+    payload_capacity_kg: float = 0.0
+    current_payload_kg: float = 0.0
 
 
 class FleetEvent(BaseModel):
+    id: int = 0
     time: str
     type: EventType
     message: str
 
 
+class P2PMessage(BaseModel):
+    id: str
+    sender: RobotId
+    recipient: str
+    type: P2PType
+    payload: str
+    timestamp: str
+
+
+class AuditRecord(BaseModel):
+    id: int
+    created_at: datetime
+    actor: str
+    category: Literal["AUTH", "CONTROL", "TASK", "CONFIG", "SYSTEM"]
+    event_type: str | None = None
+    sim_time: str | None = None
+    message: str
+
+
+class Kpis(BaseModel):
+    fleet_utilization_pct: int = 0
+    avg_battery_pct: int = 0
+    collision_count: int = 0
+    active_leases: int = 0
+    operational_pct: int = 100
+    completed_total: int = 0
+    queued_tasks: int = 0
+    tasks_per_hour: float = 0.0
+    tick: int = 0
+
+
+class TaskRecord(BaseModel):
+    id: str
+    pickup: str
+    destination: str
+    priority: int = Field(ge=1, le=100)
+    status: TaskStatus
+    payload_kg: float = 150.0
+    payload_size: Literal["small", "medium", "heavy", "pallet"] = "medium"
+    urgency: Literal["low", "standard", "critical"] = "standard"
+    assigned_robot_id: RobotId | None = None
+    created_at: datetime
+
+
 class FleetState(BaseModel):
+    seq: int = 0
     tick: int = Field(ge=0)
     running: bool
     aisle_blocked: bool
+    blocked_nodes: list[str] = Field(default_factory=list)
     reservation: RobotId | None
     lease_until: int = Field(ge=0)
+    leases: dict[str, RobotId] = Field(default_factory=dict)
     completed_tasks: int = Field(ge=0)
     collision_count: int = Field(ge=0)
     messages: int = Field(ge=0)
     events: list[FleetEvent]
+    p2p: list[P2PMessage] = Field(default_factory=list)
     robots: list[RobotState]
+    tasks: list[TaskRecord] = Field(default_factory=list)
+    kpis: Kpis = Field(default_factory=Kpis)
 
 
 class SimulationControl(BaseModel):
@@ -66,16 +126,14 @@ class ReservationRequest(BaseModel):
 
 
 class BlockageRequest(BaseModel):
-    aisle_id: str = Field(default="B-07", min_length=1, max_length=32)
+    aisle_id: str = Field(default="B-07", min_length=1, max_length=64)
+    blocked: bool = True
 
 
 class TaskBidRequest(BaseModel):
     task_id: str = Field(min_length=1, max_length=64)
     destination: str = Field(min_length=1, max_length=64)
     candidate_robot_ids: list[RobotId] = Field(min_length=1)
-
-
-TaskStatus = Literal["Queued", "Assigned", "In Progress", "Completed", "Blocked"]
 
 
 class TaskCreate(BaseModel):
@@ -94,19 +152,6 @@ class TaskUpdate(BaseModel):
     urgency: Literal["low", "standard", "critical"] | None = None
     assigned_robot_id: RobotId | None = None
     status: TaskStatus | None = None
-
-
-class TaskRecord(BaseModel):
-    id: str
-    pickup: str
-    destination: str
-    priority: int = Field(ge=1, le=100)
-    status: TaskStatus
-    payload_kg: float = 150.0
-    payload_size: Literal["small", "medium", "heavy", "pallet"] = "medium"
-    urgency: Literal["low", "standard", "critical"] = "standard"
-    assigned_robot_id: RobotId | None = None
-    created_at: datetime
 
 
 class KnowledgeChunkCreate(BaseModel):
@@ -129,6 +174,7 @@ class KnowledgeQuery(BaseModel):
 class KnowledgeChunk(KnowledgeChunkCreate):
     id: str
     created_at: datetime
+    similarity: float | None = None  # cosine similarity to the query, when searched
 
 
 class AccessToken(BaseModel):
@@ -162,3 +208,12 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=12, max_length=128)
     roles: list[AppRole] = Field(default_factory=lambda: ["viewer"], min_length=1, max_length=4)
+
+
+class BatteryFaultRequest(BaseModel):
+    robot_id: str
+    battery: float = 22.0
+
+
+class AgentFaultRequest(BaseModel):
+    robot_id: str

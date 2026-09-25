@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap');
+  
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  body {
+    width: 2800px;
+    height: 1850px;
+    background: #f8fafc;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #0f172a;
+    padding: 24px;
+    overflow: hidden;
+  }
+
+  /* TOP HEADER BANNER */
+  .header-banner {
+    background: #091e42;
+    border-radius: 14px;
+    padding: 20px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 10px 25px -5px rgba(9, 30, 66, 0.25);
+    margin-bottom: 20px;
+    border-left: 10px solid #00b4d8;
+  }
+  
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+  }
+  
+  .brand-logo {
+    font-size: 46px;
+    font-weight: 900;
+    letter-spacing: -1px;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .brand-logo span {
+    color: #00b4d8;
+  }
+  
+  .header-divider {
+    width: 2px;
+    height: 52px;
+    background: #334e68;
+  }
+  
+  .header-title-block h1 {
+    font-size: 28px;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: -0.5px;
+  }
+  .header-title-block p {
+    font-size: 15px;
+    font-weight: 500;
+    color: #94a3b8;
+    margin-top: 3px;
+  }
+  
+  .header-badges {
+    display: flex;
+    gap: 16px;
+  }
+  
+  .badge {
+    background: rgba(0, 180, 216, 0.12);
+    border: 1.5px solid #00b4d8;
+    border-radius: 30px;
+    padding: 10px 22px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 15px;
+  }
+  .badge-icon {
+    width: 22px;
+    height: 22px;
+    fill: #00b4d8;
+  }
+
+  /* MAIN GRID LAYOUT */
+  .architecture-grid {
+    display: grid;
+    grid-template-columns: 740px 720px 640px 604px;
+    gap: 20px;
+    margin-bottom: 20px;
+    height: 800px;
+  }
+
+  /* SECTION CONTAINERS */
+  .arch-card {
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1.5px solid #cbd5e1;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .card-header {
+    padding: 14px 20px;
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: -0.2px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1.5px solid #e2e8f0;
+  }
+
+  .tier-1-hdr { background: #ffe4e6; color: #9f1239; border-bottom-color: #fecdd3; }
+  .tier-2-hdr { background: #e0f2fe; color: #0369a1; border-bottom-color: #bae6fd; }
+  .tier-3-hdr { background: #dcfce7; color: #15803d; border-bottom-color: #bbf7d0; }
+  .tier-4-hdr { background: #f3e8ff; color: #7e22ce; border-bottom-color: #e9d5ff; }
+
+  .card-body {
+    padding: 20px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    position: relative;
+    background: #ffffff;
+  }
+
+  /* TIER 1 STYLES */
+  .hardware-box {
+    border: 2px dashed #cbd5e1;
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .hw-title {
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #475569;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sensor-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .sensor-chip {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  }
+  .chip-sub {
+    font-size: 11px;
+    font-weight: 500;
+    color: #64748b;
+    display: block;
+  }
+
+  .processing-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .proc-node {
+    background: #f1f5f9;
+    border: 1.5px solid #94a3b8;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .proc-node.primary {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #1d4ed8;
+  }
+  .proc-node.success {
+    background: #f0fdf4;
+    border-color: #22c55e;
+    color: #15803d;
+  }
+  .proc-node.danger {
+    background: #fef2f2;
+    border-color: #ef4444;
+    color: #b91c1c;
+  }
+
+  .amr-vehicle-card {
+    background: #0f172a;
+    border-radius: 10px;
+    padding: 14px 20px;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: auto;
+  }
+  .amr-tag {
+    font-size: 15px;
+    font-weight: 800;
+    color: #38bdf8;
+  }
+  .amr-specs {
+    font-size: 12px;
+    color: #94a3b8;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* TIER 2 STYLES */
+  .mesh-container {
+    background: #f0f9ff;
+    border: 1.5px solid #bae6fd;
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    position: relative;
+  }
+  .mesh-title {
+    font-size: 14px;
+    font-weight: 800;
+    color: #0369a1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mesh-robots-row {
+    display: flex;
+    justify-content: space-around;
+    width: 100%;
+    margin-top: 10px;
+  }
+  .mesh-robot-box {
+    background: #ffffff;
+    border: 2px solid #0284c7;
+    border-radius: 10px;
+    padding: 12px 18px;
+    text-align: center;
+    box-shadow: 0 4px 10px rgba(2, 132, 199, 0.1);
+  }
+  .robot-name {
+    font-size: 15px;
+    font-weight: 800;
+    color: #0f172a;
+  }
+  .robot-role {
+    font-size: 11px;
+    color: #0284c7;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .v2v-exchange-box {
+    width: 100%;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .v2v-item {
+    font-size: 12px;
+    font-weight: 700;
+    color: #334155;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .consensus-modules {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 4px;
+  }
+  .c-box {
+    background: #f8fafc;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .c-box-title {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .c-box-desc {
+    font-size: 11.5px;
+    color: #64748b;
+    line-height: 1.4;
+  }
+
+  .security-strip {
+    background: #f1f5f9;
+    border: 1px solid #94a3b8;
+    border-radius: 8px;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+    margin-top: auto;
+  }
+
+  /* TIER 3 STYLES */
+  .db-section {
+    background: #f0fdf4;
+    border: 1.5px solid #bbf7d0;
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .db-logo {
+    width: 52px;
+    height: 52px;
+    background: #166534;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 24px;
+    font-weight: 900;
+  }
+  .db-info h3 {
+    font-size: 16px;
+    font-weight: 800;
+    color: #14532d;
+  }
+  .db-info p {
+    font-size: 12px;
+    color: #166534;
+    font-weight: 500;
+  }
+
+  .api-services-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .api-service-item {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-left: 4px solid #16a34a;
+    border-radius: 8px;
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .api-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+  .api-tech {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #15803d;
+    background: #dcfce7;
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  .vector-rag-box {
+    background: #ffffff;
+    border: 1.5px solid #86efac;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-top: auto;
+  }
+  .vector-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: #15803d;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .vector-desc {
+    font-size: 11px;
+    color: #475569;
+    margin-top: 4px;
+  }
+
+  /* TIER 4 STYLES */
+  .twin-hud-preview {
+    background: #0f172a;
+    border: 1.5px solid #64748b;
+    border-radius: 10px;
+    padding: 14px;
+    color: #ffffff;
+  }
+  .hud-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #334155;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+  .hud-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #38bdf8;
+  }
+  .hud-live {
+    font-size: 10px;
+    font-weight: 800;
+    background: #ef4444;
+    color: #ffffff;
+    padding: 2px 8px;
+    border-radius: 20px;
+  }
+  .hud-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    text-align: center;
+  }
+  .hud-stat-val {
+    font-size: 15px;
+    font-weight: 800;
+    color: #f8fafc;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .hud-stat-lbl {
+    font-size: 10px;
+    color: #94a3b8;
+    text-transform: uppercase;
+  }
+
+  .ui-modules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .ui-module-row {
+    background: #faf5ff;
+    border: 1px solid #e9d5ff;
+    border-radius: 6px;
+    padding: 9px 12px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #581c87;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .ui-proto {
+    font-size: 10.5px;
+    font-family: 'JetBrains Mono', monospace;
+    background: #ede9fe;
+    color: #6d28d9;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .frontend-stack-chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: auto;
+  }
+  .f-chip {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #334155;
+  }
+
+  /* PROCESS FLOWCHART SECTION */
+  .flowchart-section {
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1.5px solid #cbd5e1;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+    padding: 18px 24px;
+    margin-bottom: 20px;
+  }
+  .flowchart-header {
+    font-size: 15px;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .flow-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+  }
+  .flow-step {
+    flex: 1;
+    background: #f8fafc;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 14px 12px;
+    text-align: center;
+    position: relative;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+  }
+  .flow-step.highlight {
+    border-color: #0284c7;
+    background: #f0f9ff;
+  }
+  .step-num {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #0284c7;
+    margin-bottom: 4px;
+  }
+  .step-title {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 4px;
+  }
+  .step-desc {
+    font-size: 11px;
+    color: #64748b;
+    line-height: 1.3;
+  }
+  .flow-arrow {
+    padding: 0 10px;
+    font-size: 20px;
+    color: #94a3b8;
+    font-weight: 800;
+  }
+
+  /* BOTTOM PANEL: HIGHLIGHTS & TECH STACK */
+  .bottom-panel {
+    display: grid;
+    grid-template-columns: 1650px 1082px;
+    gap: 20px;
+  }
+
+  .highlights-card {
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1.5px solid #cbd5e1;
+    padding: 18px 24px;
+  }
+  .highlights-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 14px;
+  }
+  .highlights-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+  .h-item {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .h-item h4 {
+    font-size: 13px;
+    font-weight: 800;
+    color: #0284c7;
+    margin-bottom: 4px;
+  }
+  .h-item p {
+    font-size: 11.5px;
+    color: #475569;
+    line-height: 1.4;
+  }
+
+  .techstack-card {
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1.5px solid #cbd5e1;
+    padding: 18px 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .techstack-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .spof-pill {
+    background: #fee2e2;
+    border: 1px solid #ef4444;
+    color: #991b1b;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+
+  .tech-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .tech-table tr {
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .tech-table td {
+    padding: 6px 4px;
+  }
+  .tech-cat {
+    font-weight: 700;
+    color: #475569;
+    width: 150px;
+  }
+  .tech-val {
+    font-weight: 600;
+    color: #0f172a;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+  }
+</style>
+</head>
+<body>
+
+  <!-- TOP HEADER BANNER -->
+  <div class="header-banner">
+    <div class="header-left">
+      <div class="brand-logo">Edge<span>Fleet</span></div>
+      <div class="header-divider"></div>
+      <div class="header-title-block">
+        <h1>Distributed Edge-AI Fleet Coordination for AMRs</h1>
+        <p>Complete End-to-End System Architecture | Smart India Hackathon 2026 | PS ID: 26123 (BEL)</p>
+      </div>
+    </div>
+    <div class="header-badges">
+      <div class="badge">
+        <svg class="badge-icon" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
+        Zero Single Point of Failure (Zero SPOF)
+      </div>
+      <div class="badge">
+        <svg class="badge-icon" viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
+        &lt; 15 ms Decision Latency
+      </div>
+      <div class="badge">
+        <svg class="badge-icon" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+        100% Mission Continuity
+      </div>
+    </div>
+  </div>
+
+  <!-- 4 ARCHITECTURAL TIERS -->
+  <div class="architecture-grid">
+
+    <!-- TIER 1 -->
+    <div class="arch-card">
+      <div class="card-header tier-1-hdr">
+        <span>Tier 1: Onboard AMR Edge Compute</span>
+        <span>Robot Hardware &amp; Local Runtime</span>
+      </div>
+      <div class="card-body">
+        <div class="hardware-box">
+          <div class="hw-title">
+            <span>Sensors &amp; Data Ingestion (20Hz)</span>
+            <span>Local Bus</span>
+          </div>
+          <div class="sensor-grid">
+            <div class="sensor-chip">
+              <span>📡</span>
+              <div>2D LiDAR<span class="chip-sub">Costmap2D (0.05m)</span></div>
+            </div>
+            <div class="sensor-chip">
+              <span>⚙️</span>
+              <div>Wheel Encoders<span class="chip-sub">Differential Odometry</span></div>
+            </div>
+            <div class="sensor-chip">
+              <span>🧭</span>
+              <div>6-Axis IMU<span class="chip-sub">Angular Velocity + Accel</span></div>
+            </div>
+            <div class="sensor-chip">
+              <span>🔋</span>
+              <div>BMS Monitor<span class="chip-sub">B_min = 20% Safeguard</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="processing-flow">
+          <div class="proc-node primary">
+            <span>Sensor Fusion &amp; State Estimation</span>
+            <span>Extended Kalman Filter (EKF)</span>
+          </div>
+          <div class="proc-node">
+            <span>Local Dynamic Mapping</span>
+            <span>Costmap2D (Obstacle Layers)</span>
+          </div>
+          <div class="proc-node primary">
+            <span>Space-Time A* Path Planner</span>
+            <span>L = 2 Node Dynamic Lookahead</span>
+          </div>
+          <div class="proc-node success">
+            <span>Actuation Controller</span>
+            <span>Diff-Drive Velocity (v, ω)</span>
+          </div>
+          <div class="proc-node danger">
+            <span>Hardware Safety Envelope</span>
+            <span>ISO 3691-4 &amp; Dual-Relay E-Stop</span>
+          </div>
+        </div>
+
+        <div class="amr-vehicle-card">
+          <div>
+            <div class="amr-tag">AMR 01 – Atlas (Edge Node)</div>
+            <div style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">Local autonomy daemon executing on SBC</div>
+          </div>
+          <div class="amr-specs">Pi 5 / Jetson Orin Nano<br/>ROS 2 Humble • Python 3.12</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TIER 2 -->
+    <div class="arch-card">
+      <div class="card-header tier-2-hdr">
+        <span>Tier 2: Distributed Consensus &amp; P2P Swarm</span>
+        <span>Vehicle-to-Vehicle (V2V) Mesh</span>
+      </div>
+      <div class="card-body">
+        <div class="mesh-container">
+          <div class="mesh-title">
+            <span>⚡ Eclipse Zenoh Brokerless V2V Pub/Sub Mesh</span>
+          </div>
+          <div class="mesh-robots-row">
+            <div class="mesh-robot-box">
+              <div class="robot-name">AMR 01</div>
+              <div class="robot-role">Atlas</div>
+            </div>
+            <div style="font-size: 24px; color: #0284c7; align-self: center;">⟷</div>
+            <div class="mesh-robot-box">
+              <div class="robot-name">AMR 02</div>
+              <div class="robot-role">Nova</div>
+            </div>
+            <div style="font-size: 24px; color: #0284c7; align-self: center;">⟷</div>
+            <div class="mesh-robot-box">
+              <div class="robot-name">AMR 03</div>
+              <div class="robot-role">Kite</div>
+            </div>
+          </div>
+          <div class="v2v-exchange-box">
+            <div class="v2v-item"><span>🔄</span> State Gossip (&lt;128 B)</div>
+            <div class="v2v-item"><span>🏷️</span> CNP Bids (&lt;15ms)</div>
+            <div class="v2v-item"><span>🔒</span> Leases (4.8s TTL)</div>
+          </div>
+        </div>
+
+        <div class="consensus-modules">
+          <div class="c-box">
+            <div class="c-box-title"><span>📊</span> Contract-Net Protocol (CNP)</div>
+            <div class="c-box-desc">
+              Decentralized task auctions. AMRs compute scalar utility <i>U = 0.4P - 0.35D + 0.25(B - 20%)</i>. Highest bidder claims task in &lt;15ms without central server.
+            </div>
+          </div>
+          <div class="c-box">
+            <div class="c-box-title"><span>⏳</span> Space-Time Corridor Leases</div>
+            <div class="c-box-desc">
+              Mutex lock for single-lane corridors (e.g. Corridor C-14). 4.8s TTL with auto-expiry. Deterministic ID tie-breaking prevents deadlocks and livelocks.
+            </div>
+          </div>
+        </div>
+
+        <div class="security-strip">
+          <span style="font-size: 18px;">🛡️</span>
+          <div>
+            <b>Ed25519 Cryptographic Frame Signing:</b> All peer frames cryptographically signed via onboard HSM. Rejects rogue or spoofed V2V packets.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TIER 3 -->
+    <div class="arch-card">
+      <div class="card-header tier-3-hdr">
+        <span>Tier 3: Audit &amp; Knowledge Layer</span>
+        <span>Asynchronous Edge Gateway</span>
+      </div>
+      <div class="card-body">
+        <div class="db-section">
+          <div class="db-logo">PG</div>
+          <div class="db-info">
+            <h3>PostgreSQL 16 + pgvector</h3>
+            <p>Relational Storage &amp; 384-d HNSW Vector Store</p>
+          </div>
+        </div>
+
+        <div class="api-services-grid">
+          <div class="api-service-item">
+            <span class="api-title">FastAPI Telemetry Gateway</span>
+            <span class="api-tech">Python 3.12 / REST</span>
+          </div>
+          <div class="api-service-item">
+            <span class="api-title">Warehouse Map &amp; Topology Service</span>
+            <span class="api-tech">GeoJSON / NetworkX</span>
+          </div>
+          <div class="api-service-item">
+            <span class="api-title">Mission &amp; Task Audit Logger</span>
+            <span class="api-tech">Async SQLAlchemy</span>
+          </div>
+          <div class="api-service-item">
+            <span class="api-title">Docker Orchestration Daemon</span>
+            <span class="api-tech">Compose Containerized</span>
+          </div>
+        </div>
+
+        <div class="vector-rag-box">
+          <div class="vector-title"><span>🧠</span> Semantic RAG Retrieval Service</div>
+          <div class="vector-desc">
+            Indexes industrial SOPs and historical hazard incidents into 384-dimensional vector embeddings with HNSW indexing for instant incident resolution.
+          </div>
+        </div>
+
+        <div style="background: #f1f5f9; border-radius: 8px; padding: 10px 14px; font-size: 11.5px; color: #475569; border-left: 4px solid #0284c7;">
+          <b>Decoupled Safety Notice:</b> Tier 3 operates out-of-band. Server crashes never disrupt active robot trajectories.
+        </div>
+      </div>
+    </div>
+
+    <!-- TIER 4 -->
+    <div class="arch-card">
+      <div class="card-header tier-4-hdr">
+        <span>Tier 4: Supervisory Digital Twin</span>
+        <span>Operator Cockpit &amp; Canvas HUD</span>
+      </div>
+      <div class="card-body">
+        <div class="twin-hud-preview">
+          <div class="hud-header">
+            <span class="hud-title">WAREHOUSE ZONE 1 HUD</span>
+            <span class="hud-live">LIVE 50Hz</span>
+          </div>
+          <div class="hud-stats">
+            <div>
+              <div class="hud-stat-val">3 / 3</div>
+              <div class="hud-stat-lbl">Active AMRs</div>
+            </div>
+            <div>
+              <div class="hud-stat-val">&lt; 15 ms</div>
+              <div class="hud-stat-lbl">V2V Latency</div>
+            </div>
+            <div>
+              <div class="hud-stat-val">0</div>
+              <div class="hud-stat-lbl">Conflicts</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ui-modules-list">
+          <div class="ui-module-row">
+            <span>Interactive 2D/3D Warehouse Canvas</span>
+            <span class="ui-proto">Canvas / WebGL</span>
+          </div>
+          <div class="ui-module-row">
+            <span>Real-time Telemetry &amp; Battery Stream</span>
+            <span class="ui-proto">WebSocket /ws/fleet</span>
+          </div>
+          <div class="ui-module-row">
+            <span>Dynamic Obstacle Injection (Aisle B-07)</span>
+            <span class="ui-proto">Synthetic Event</span>
+          </div>
+          <div class="ui-module-row">
+            <span>Mission History &amp; Incident Playback</span>
+            <span class="ui-proto">REST / Historical</span>
+          </div>
+          <div class="ui-module-row" style="background: #fef2f2; border-color: #fecdd3; color: #991b1b;">
+            <span>Emergency Fleet Stop (Manual E-Stop)</span>
+            <span class="ui-proto" style="background: #fee2e2; color: #b91c1c;">E-Stop Control</span>
+          </div>
+        </div>
+
+        <div class="frontend-stack-chips">
+          <div class="f-chip">Next.js 15</div>
+          <div class="f-chip">React 19</div>
+          <div class="f-chip">TypeScript</div>
+          <div class="f-chip">TailwindCSS</div>
+          <div class="f-chip">Lucide Icons</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- PROCESS FLOWCHART SECTION -->
+  <div class="flowchart-section">
+    <div class="flowchart-header">
+      <span>Process Flowchart — Technical Approach &amp; Data Pipeline (End-to-End)</span>
+      <span style="font-size: 12px; color: #64748b; font-weight: 600;">Autonomous Cycle Execution: ~50ms</span>
+    </div>
+    <div class="flow-row">
+      <div class="flow-step">
+        <div class="step-num">Step 1</div>
+        <div class="step-title">Data Acquisition</div>
+        <div class="step-desc">20Hz LiDAR point clouds, IMU, wheel odometry, and BMS state.</div>
+      </div>
+      <div class="flow-arrow">➔</div>
+      <div class="flow-step">
+        <div class="step-num">Step 2</div>
+        <div class="step-title">Sensor Fusion &amp; EKF</div>
+        <div class="step-desc">Generates 6-DoF pose [x, y, θ, v] &amp; Costmap2D local obstacle representation.</div>
+      </div>
+      <div class="flow-arrow">➔</div>
+      <div class="flow-step highlight">
+        <div class="step-num">Step 3</div>
+        <div class="step-title">Contract-Net Auction</div>
+        <div class="step-desc">Task broadcast over Zenoh. AMRs bid utility. Highest bidder claims task in &lt;15ms.</div>
+      </div>
+      <div class="flow-arrow">➔</div>
+      <div class="flow-step highlight">
+        <div class="step-num">Step 4</div>
+        <div class="step-title">Space-Time A* &amp; Leases</div>
+        <div class="step-desc">Computes detour trajectory. Obtains 4.8s corridor micro-lease mutex.</div>
+      </div>
+      <div class="flow-arrow">➔</div>
+      <div class="flow-step">
+        <div class="step-num">Step 5</div>
+        <div class="step-title">Execution &amp; Avoidance</div>
+        <div class="step-desc">Diff-drive actuation. Deterministic yielding at holding lines if contested.</div>
+      </div>
+      <div class="flow-arrow">➔</div>
+      <div class="flow-step">
+        <div class="step-num">Step 6</div>
+        <div class="step-title">Audit &amp; HUD Stream</div>
+        <div class="step-desc">Pushes 50Hz telemetry to Next.js twin; logs semantic events to PostgreSQL.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM PANEL: KEY HIGHLIGHTS & TECH STACK -->
+  <div class="bottom-panel">
+
+    <div class="highlights-card">
+      <div class="highlights-title">Key Architectural Highlights (Defense &amp; Industrial Standards)</div>
+      <div class="highlights-grid">
+        <div class="h-item">
+          <h4>Decentralized Swarm Intelligence</h4>
+          <p>Each robot calculates its own allocation and paths. Complete immunity against central cloud or Wi-Fi blackout.</p>
+        </div>
+        <div class="h-item">
+          <h4>Contract-Net Protocol (CNP)</h4>
+          <p>Mathematical utility bidding factoring priority, distance, and 20% reserve battery threshold in &lt;15ms.</p>
+        </div>
+        <div class="h-item">
+          <h4>Space-Time Micro-Leases</h4>
+          <p>Mutual-exclusion access to narrow corridors with 4.8s TTL auto-expiry, permanently preventing deadlock.</p>
+        </div>
+        <div class="h-item">
+          <h4>Zero-Trust Security &amp; ISO Safety</h4>
+          <p>Ed25519 cryptographic signing prevents V2V packet spoofing. Compliant with ISO 3691-4 industrial safety envelopes.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="techstack-card">
+      <div class="techstack-title">
+        <span>Complete Technology Stack</span>
+        <span class="spof-pill">ZERO SPOF ARCHITECTURE</span>
+      </div>
+      <table class="tech-table">
+        <tr>
+          <td class="tech-cat">Hardware &amp; SBCs:</td>
+          <td class="tech-val">Raspberry Pi 5, NVIDIA Jetson Orin Nano, 2D LiDAR, IMU</td>
+        </tr>
+        <tr>
+          <td class="tech-cat">Robotics &amp; Edge:</td>
+          <td class="tech-val">ROS 2 Humble, Python 3.12, NumPy, robot_localization (EKF)</td>
+        </tr>
+        <tr>
+          <td class="tech-cat">P2P Swarm Network:</td>
+          <td class="tech-val">Eclipse Zenoh (V2V Mesh), Contract-Net Protocol, Ed25519</td>
+        </tr>
+        <tr>
+          <td class="tech-cat">Database &amp; Audit:</td>
+          <td class="tech-val">PostgreSQL 16, pgvector (384-d HNSW index), FastAPI, Docker</td>
+        </tr>
+        <tr>
+          <td class="tech-cat">Supervisory HUD:</td>
+          <td class="tech-val">Next.js 15, TypeScript, WebSockets (50Hz), TailwindCSS, Canvas</td>
+        </tr>
+      </table>
+    </div>
+
+  </div>
+
+</body>
+</html>

@@ -43,6 +43,18 @@ class KnowledgeChunkModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
+class AuditEventModel(Base):
+    __tablename__ = "audit_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    actor: Mapped[str] = mapped_column(String(320), nullable=False)
+    category: Mapped[str] = mapped_column(String(16), nullable=False)
+    event_type: Mapped[str | None] = mapped_column(String(16))
+    sim_time: Mapped[str | None] = mapped_column(String(16))
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+
+
 class UserModel(Base):
     __tablename__ = "users"
 

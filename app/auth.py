@@ -11,6 +11,7 @@ from fastapi.security import OAuth2PasswordBearer
 from pwdlib import PasswordHash
 from sqlalchemy import func, select
 
+from app.audit import actor_var
 from app.database import Database
 from app.models import UserModel
 from app.settings import Settings
@@ -58,11 +59,11 @@ async def bootstrap_admin(database: Database, settings: Settings) -> None:
         if existing is None:
             encoded = await asyncio.to_thread(password_hash.hash, settings.bootstrap_admin_password)
             session.add(UserModel(id=uuid.uuid4(), email=email, password_hash=encoded, roles=["admin", "operator", "viewer", "fleet-agent"], active=True))
-        
-        # Also bootstrap standard warehouse operator account for evaluator demo
+
+        # Demo operator account for local evaluation only: never seed a well-known password in production.
         operator_email = "operator@edgefleet.local"
-        existing_op = await session.scalar(select(UserModel).where(func.lower(UserModel.email) == operator_email))
-        if existing_op is None:
+        existing_op = None if settings.environment == "production" else await session.scalar(select(UserModel).where(func.lower(UserModel.email) == operator_email))
+        if existing_op is None and settings.environment != "production":
             encoded_op = await asyncio.to_thread(password_hash.hash, "operator-demo-2026")
             session.add(UserModel(id=uuid.uuid4(), email=operator_email, password_hash=encoded_op, roles=["operator", "viewer"], active=True))
 
@@ -113,6 +114,12 @@ async def delete_user(database: Database, user_id: uuid.UUID) -> bool:
 
 
 async def current_identity(request: Request, token: str | None = Depends(oauth2_scheme)) -> Identity:
+    identity = await _resolve_request_identity(request, token)
+    actor_var.set(identity.email)
+    return identity
+
+
+async def _resolve_request_identity(request: Request, token: str | None) -> Identity:
     settings: Settings = request.app.state.settings
     if not settings.auth_required:
         return Identity(subject="local-development", email="local@edgefleet", roles=frozenset({"admin", "operator", "viewer", "fleet-agent"}))
@@ -127,10 +134,6 @@ async def current_identity(request: Request, token: str | None = Depends(oauth2_
 
 
 async def resolve_identity(database: Database, token_service: TokenService, token: str) -> Identity:
-    if token in {"demo-jwt-token-sih26123", "demo-token"} or token.startswith("mock_admin_token"):
-        return Identity(subject="00000000-0000-0000-0000-000000000001", email="admin@edgefleet.local", roles=frozenset({"admin", "operator", "viewer", "fleet-agent"}))
-    if token.startswith("mock_operator_token"):
-        return Identity(subject="00000000-0000-0000-0000-000000000002", email="operator@edgefleet.local", roles=frozenset({"operator", "viewer"}))
     subject = token_service.subject(token)
     async with database.sessions() as session:
         try:

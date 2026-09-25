@@ -77,17 +77,31 @@ def test_health_and_initial_fleet_state(client: TestClient) -> None:
     assert len(state["robots"]) == 3
 
 
-def test_blockage_reassigns_task_and_reservation_is_reported(client: TestClient) -> None:
+def test_blockage_is_generic_and_reservation_is_reported(client: TestClient) -> None:
     client.post("/api/fleet/reset")
     blocked = client.post("/api/fleet/blockages", json={"aisle_id": "B-07"})
     assert blocked.status_code == 200
-    robots = {robot["id"]: robot for robot in blocked.json()["robots"]}
-    assert robots["AMR-03"]["status"] == "Rerouting"
-    assert "P-23" in robots["AMR-01"]["task"]
+    assert blocked.json()["blocked_nodes"] == ["AISLE-B07"]
+    assert blocked.json()["aisle_blocked"] is True
 
     lease = client.post("/api/fleet/reservations", json={"robot_id": "AMR-02", "lease_seconds": 4.8})
     assert lease.status_code == 200
     assert lease.json()["reservation"] == "AMR-02"
+
+    cleared = client.post("/api/fleet/blockages", json={"aisle_id": "B-07", "blocked": False})
+    assert cleared.json()["blocked_nodes"] == []
+    assert client.post("/api/fleet/blockages", json={"aisle_id": "NOWHERE-99"}).status_code == 422
+    assert client.post("/api/fleet/reservations", json={"robot_id": "AMR-99"}).status_code == 422
+
+
+def test_world_contract_and_snapshot_shape(client: TestClient) -> None:
+    world = client.get("/api/world").json()
+    assert {n["id"] for n in world["nodes"]} >= {"DOCK-W", "C-14", "AISLE-B07"}
+    assert world["mutex_zones"] == ["C-14"]
+    assert world["config"]["control_period_s"] == 0.6
+    assert [r["id"] for r in world["robots"]] == ["AMR-01", "AMR-02", "AMR-03"]
+    state = client.get("/api/fleet/state").json()
+    assert {"seq", "tasks", "kpis", "p2p", "blocked_nodes"} <= set(state)
 
 
 def test_websocket_receives_initial_telemetry(client: TestClient) -> None:
@@ -97,11 +111,13 @@ def test_websocket_receives_initial_telemetry(client: TestClient) -> None:
 
 
 def test_task_creation_assignment_and_completion(client: TestClient) -> None:
-    created = client.post("/api/tasks", json={"pickup": "P-08", "destination": "Dock E", "priority": 86})
+    created = client.post("/api/tasks", json={"pickup": "RACK A-02", "destination": "Dock E", "priority": 86})
     assert created.status_code == 201, created.text
     task = created.json()
     assert task["status"] == "Assigned"
     assert task["assigned_robot_id"] in {"AMR-01", "AMR-02", "AMR-03"}
+    assert task["pickup"] == "RACK A-02" and task["destination"] == "DOCK-E"
+    assert client.post("/api/tasks", json={"pickup": "P-08", "destination": "DOCK-E"}).status_code == 422
 
     listed = client.get("/api/tasks")
     assert any(item["id"] == task["id"] for item in listed.json())
@@ -116,6 +132,42 @@ def test_secure_api_rejects_missing_invalid_and_expired_tokens(secure_client: Te
     assert secure_client.get("/api/fleet/state", headers={"Authorization": "Bearer malformed"}).status_code == 401
     assert secure_client.get("/api/fleet/state", headers={"Authorization": f"Bearer {access_token(expired=True)}"}).status_code == 401
     assert secure_client.get("/api/fleet/state", headers={"Authorization": f"Bearer {access_token(audience='wrong')}"}).status_code == 401
+
+
+def test_audit_trail_records_actor_and_category(client: TestClient) -> None:
+    created = client.post("/api/tasks", json={"pickup": "RACK A-02", "destination": "DOCK-E"})
+    assert created.status_code == 201
+    client.post("/api/fleet/blockages", json={"aisle_id": "B-07"})
+    rows = client.get("/api/audit?limit=100").json()
+    assert rows, "audit trail should not be empty"
+    task_rows = [r for r in rows if r["category"] == "TASK" and created.json()["id"] in r["message"]]
+    assert task_rows and all(r["actor"] == "local@edgefleet" for r in task_rows)
+    control = [r for r in rows if r["category"] == "CONTROL" and "Obstacle reported" in r["message"]]
+    assert control and control[0]["actor"] == "local@edgefleet"
+    assert client.get("/api/audit?category=TASK").json() and all(r["category"] == "TASK" for r in client.get("/api/audit?category=TASK").json())
+
+
+def test_secure_audit_records_logins_and_admin_changes(secure_client: TestClient) -> None:
+    bad = secure_client.post("/api/auth/token", data={"username": "admin@example.test", "password": "wrong-password-123"})
+    assert bad.status_code == 401
+    token = login(secure_client, "admin@example.test", "Test-Admin-Password-2026!")
+    headers = {"Authorization": f"Bearer {token}"}
+    secure_client.post("/api/users", headers=headers, json={"email": "auditee@edgefleet.in", "password": "Test-Viewer-Password-2026!", "roles": ["viewer"]})
+    rows = secure_client.get("/api/audit", headers=headers).json()
+    messages = {(r["category"], r["actor"], r["message"]) for r in rows}
+    assert ("AUTH", "admin@example.test", "login succeeded") in messages
+    assert any(c == "AUTH" and m.startswith("login failed") for c, _, m in messages)
+    assert any(c == "CONFIG" and a == "admin@example.test" and "auditee@edgefleet.in" in m for c, a, m in messages)
+
+
+def test_secure_api_rejects_hardcoded_demo_tokens(secure_client: TestClient) -> None:
+    for token in ("demo-jwt-token-sih26123", "demo-token", "mock_admin_token", "mock_operator_token_1"):
+        headers = {"Authorization": f"Bearer {token}"}
+        assert secure_client.get("/api/fleet/state", headers=headers).status_code == 401, token
+        assert secure_client.post("/api/tasks", headers=headers, json={"pickup": "RACK A-01", "destination": "DOCK-E"}).status_code == 401
+        with pytest.raises(Exception):
+            with secure_client.websocket_connect("/ws/fleet", headers={"sec-websocket-protocol": f"edgefleet, {token}"}) as ws:
+                ws.receive_json()
 
 
 def test_secure_api_enforces_roles_and_response_headers(secure_client: TestClient) -> None:
@@ -149,7 +201,7 @@ def test_secure_api_enforces_roles_and_response_headers(secure_client: TestClien
     assert read.headers["x-frame-options"] == "DENY"
     assert read.headers["cache-control"] == "no-store"
     assert read.headers.get("x-request-id")
-    assert secure_client.post("/api/tasks", headers=admin_headers, json={"pickup": "P-01", "destination": "D-01", "priority": 50}).status_code == 201
+    assert secure_client.post("/api/tasks", headers=admin_headers, json={"pickup": "RACK A-01", "destination": "DOCK-E", "priority": 50}).status_code == 201
 
 
 def test_secure_api_validates_input_bounds(secure_client: TestClient) -> None:
@@ -244,3 +296,9 @@ def test_knowledge_vector_search(client: TestClient) -> None:
     assert query_resp.status_code == 200
     query_results = query_resp.json()
     assert len(query_results) >= 1
+
+    q = {"query": "corridor C-14 emergency choke point yielding", "limit": 3}
+    ranked = client.post("/api/knowledge/query", json=q).json()
+    assert ranked[0]["source_name"] == "SOP-AMR-001"
+    again = client.post("/api/knowledge/query", json=q).json()
+    assert [r["source_name"] for r in again] == [r["source_name"] for r in ranked]

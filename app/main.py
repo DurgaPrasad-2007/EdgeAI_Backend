@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import math
 import os
-import random
 import time
 import uuid
 from collections import defaultdict, deque
@@ -10,15 +8,18 @@ from contextlib import asynccontextmanager, suppress
 from typing import AsyncIterator
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.auth import Identity, TokenService, authenticate, bootstrap_admin, create_user, delete_user, list_users, require_roles, resolve_identity, update_user_status
 from app.cache import CacheManager
-from app.coordinator import FleetCoordinator
+from app.coordinator import FleetConflict, FleetCoordinator, FleetError
 from app.database import Database
-from app.schemas import AccessToken, BlockageRequest, CurrentUser, FleetState, IntentRequest, KnowledgeChunk, KnowledgeChunkCreate, KnowledgeQuery, KnowledgeSearch, ReservationRequest, SimulationControl, TaskBidRequest, TaskCreate, TaskUpdate, TaskRecord, UserCreate, UserDetail, UserStatusUpdate
+from app.graph import world_payload
+from app.knowledge import WAREHOUSE_SOPS, text_to_embedding
+from app.schemas import AccessToken, AgentFaultRequest, AuditRecord, BatteryFaultRequest, BlockageRequest, CurrentUser, FleetState, IntentRequest, KnowledgeChunk, KnowledgeChunkCreate, KnowledgeQuery, KnowledgeSearch, ReservationRequest, SimulationControl, TaskBidRequest, TaskCreate, TaskUpdate, TaskRecord, UserCreate, UserDetail, UserStatusUpdate
 from app.settings import Settings
 
 
@@ -33,6 +34,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await cache.connect()
     coordinator = FleetCoordinator(database, cache=cache)
     await coordinator.start()
+    await coordinator.seed_knowledge([KnowledgeChunkCreate(source_name=name, content=content, metadata=meta, embedding=text_to_embedding(content)) for name, content, meta in WAREHOUSE_SOPS])
     app.state.coordinator = coordinator
     app.state.settings = settings
     app.state.database = database
@@ -48,6 +50,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="EdgeFleet Local API", version="0.2.0", description="Local telemetry, task, and evidence API. It is never a robot motion controller.", lifespan=lifespan, docs_url="/docs", redoc_url=None)
+
+@app.exception_handler(FleetConflict)
+async def fleet_conflict_handler(_: Request, exc: FleetConflict) -> Response:
+    return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)})
+
+
+@app.exception_handler(FleetError)
+async def fleet_error_handler(_: Request, exc: FleetError) -> Response:
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
 
 # Browser origins are explicit, never reflected from the request.
 def allowed_hosts() -> list[str]:
@@ -113,9 +125,12 @@ fleet_agent = require_roles("fleet-agent", "operator", "admin")
 @app.post("/api/auth/token", response_model=AccessToken, tags=["authentication"])
 async def issue_access_token(request: Request, form: OAuth2PasswordRequestForm = Depends()) -> AccessToken:
     user = await authenticate(request.app.state.database, form.username, form.password)
+    coordinator: FleetCoordinator = request.app.state.coordinator
     if user is None:
+        await coordinator.audit("AUTH", "login failed: invalid credentials", actor=form.username[:320])
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials", headers={"WWW-Authenticate": "Bearer"})
     settings: Settings = request.app.state.settings
+    await coordinator.audit("AUTH", "login succeeded", actor=user.email)
     return AccessToken(access_token=request.app.state.token_service.issue(user), expires_in=settings.access_token_minutes * 60)
 
 
@@ -131,8 +146,9 @@ async def get_users(request: Request, _: Identity = Depends(require_roles("admin
 
 
 @app.post("/api/users", response_model=UserDetail, status_code=201, tags=["authentication"])
-async def add_user(payload: UserCreate, request: Request, _: Identity = Depends(require_roles("admin"))) -> UserDetail:
+async def add_user(payload: UserCreate, request: Request, identity: Identity = Depends(require_roles("admin"))) -> UserDetail:
     user = await create_user(request.app.state.database, str(payload.email), payload.password, list(payload.roles))
+    await request.app.state.coordinator.audit("CONFIG", f"user {user.email} created with roles {', '.join(user.roles)}", actor=identity.email)
     return UserDetail(id=str(user.id), email=user.email, roles=user.roles, active=user.active, created_at=user.created_at)
 
 
@@ -147,6 +163,7 @@ async def set_user_status(user_id: str, payload: UserStatusUpdate, request: Requ
     user = await update_user_status(request.app.state.database, parsed_id, payload.active)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
+    await request.app.state.coordinator.audit("CONFIG", f"user {user.email} {'activated' if user.active else 'deactivated'}", actor=identity.email)
     return UserDetail(id=str(user.id), email=user.email, roles=user.roles, active=user.active, created_at=user.created_at)
 
 
@@ -161,6 +178,7 @@ async def remove_user(user_id: str, request: Request, identity: Identity = Depen
     deleted = await delete_user(request.app.state.database, parsed_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="User not found")
+    await request.app.state.coordinator.audit("CONFIG", f"user {user_id} deleted", actor=identity.email)
     return {"ok": True, "deleted_id": user_id}
 
 
@@ -194,6 +212,16 @@ async def health_ready(request: Request) -> dict[str, object]:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Database unready: {exc}")
 
 
+@app.get("/api/audit", response_model=list[AuditRecord], tags=["audit"])
+async def audit_trail(limit: int = 200, category: str | None = None, _: Identity = Depends(viewer), coordinator: FleetCoordinator = Depends(get_coordinator)) -> list[AuditRecord]:
+    return await coordinator.list_audit(max(1, min(limit, 1000)), category)
+
+
+@app.get("/api/world", tags=["fleet"])
+async def world(_: Identity = Depends(viewer), coordinator: FleetCoordinator = Depends(get_coordinator)) -> dict[str, object]:
+    return coordinator.world()
+
+
 @app.get("/api/fleet/state", response_model=FleetState, tags=["fleet"])
 async def fleet_state(_: Identity = Depends(viewer), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
     return await coordinator.snapshot()
@@ -222,6 +250,16 @@ async def request_reservation(reservation: ReservationRequest, _: Identity = Dep
 @app.post("/api/fleet/blockages", response_model=FleetState, tags=["fleet"])
 async def report_blockage(blockage: BlockageRequest, _: Identity = Depends(fleet_agent), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
     return await coordinator.report_blockage(blockage)
+
+
+@app.post("/api/fleet/faults/battery", response_model=FleetState, tags=["simulation"])
+async def trigger_battery_fault(req: BatteryFaultRequest, _: Identity = Depends(operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
+    return await coordinator.set_robot_battery(req.robot_id, req.battery)
+
+
+@app.post("/api/fleet/faults/dropout", response_model=FleetState, tags=["simulation"])
+async def trigger_agent_dropout(req: AgentFaultRequest, _: Identity = Depends(operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
+    return await coordinator.simulate_agent_failure(req.robot_id)
 
 
 @app.post("/api/tasks/bid", response_model=FleetState, tags=["tasks"])
@@ -263,13 +301,6 @@ async def delete_task(task_id: str, _: Identity = Depends(operator), coordinator
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-def text_to_embedding(text: str, dim: int = 384) -> list[float]:
-    random.seed(hash(text.strip().lower()) & 0xFFFFFFFF)
-    vec = [random.gauss(0, 1) for _ in range(dim)]
-    norm = math.sqrt(sum(x * x for x in vec))
-    return [x / norm for x in vec]
-
-
 @app.post("/api/knowledge/chunks", response_model=KnowledgeChunk, status_code=201, tags=["knowledge"])
 async def add_knowledge(item: KnowledgeChunkCreate, _: Identity = Depends(operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> KnowledgeChunk:
     return await coordinator.add_knowledge(item)
@@ -302,8 +333,8 @@ async def fleet_telemetry(websocket: WebSocket) -> None:
         except Exception:
             pass
 
-    # If auth_required is enabled in production and no valid identity, close with 1008; otherwise allow demo/dev stream
-    if settings.auth_required and settings.environment == "production" and identity is None:
+    # AUTH_REQUIRED applies to the live stream exactly as it does to REST: no valid identity, no telemetry.
+    if settings.auth_required and identity is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 

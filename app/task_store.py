@@ -5,11 +5,11 @@ import math
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
-from app.models import KnowledgeChunkModel, TaskModel
-from app.schemas import KnowledgeChunk, KnowledgeChunkCreate, RobotId, TaskRecord, TaskStatus
+from app.models import AuditEventModel, KnowledgeChunkModel, TaskModel
+from app.schemas import AuditRecord, KnowledgeChunk, KnowledgeChunkCreate, RobotId, TaskRecord, TaskStatus
 
 if TYPE_CHECKING:
     from app.cache import CacheManager
@@ -61,11 +61,20 @@ class TaskStore:
         urgency: str | None = None,
         assigned_robot_id: RobotId | None = None,
         status: TaskStatus | None = None,
+        unassign: bool = False,
+        pickup: str | None = None,
+        destination: str | None = None,
     ) -> TaskRecord | None:
         async with self._sessions.begin() as session:
             model = await session.get(TaskModel, task_id, with_for_update=not self._is_sqlite)
             if model is None:
                 return None
+            if unassign:
+                model.assigned_robot_id = None
+            if pickup is not None:
+                model.pickup = pickup
+            if destination is not None:
+                model.destination = destination
             if priority is not None:
                 model.priority = priority
             if payload_kg is not None:
@@ -117,6 +126,39 @@ class TaskStore:
             await self._cache.delete("edgefleet:tasks:list")
         return self._task_record(model)
 
+    async def requeue_orphans(self) -> int:
+        """Robots do not survive a restart, so tasks they were executing go back to the queue."""
+        async with self._sessions.begin() as session:
+            result = await session.execute(
+                update(TaskModel).where(TaskModel.status.in_(("Assigned", "In Progress"))).values(status="Queued", assigned_robot_id=None)
+            )
+        if self._cache:
+            await self._cache.delete("edgefleet:tasks:list")
+        return result.rowcount or 0
+
+    async def count_completed(self) -> int:
+        async with self._sessions() as session:
+            return int(await session.scalar(select(func.count()).select_from(TaskModel).where(TaskModel.status == "Completed")) or 0)
+
+    async def knowledge_count(self) -> int:
+        async with self._sessions() as session:
+            return int(await session.scalar(select(func.count()).select_from(KnowledgeChunkModel)) or 0)
+
+    async def add_audit(self, rows: list[dict]) -> None:
+        async with self._sessions.begin() as session:
+            session.add_all([AuditEventModel(**row) for row in rows])
+
+    async def list_audit(self, limit: int, category: str | None = None) -> list[AuditRecord]:
+        statement = select(AuditEventModel).order_by(AuditEventModel.id.desc()).limit(limit)
+        if category:
+            statement = statement.where(AuditEventModel.category == category)
+        async with self._sessions() as session:
+            models = (await session.scalars(statement)).all()
+        return [
+            AuditRecord(id=m.id, created_at=m.created_at, actor=m.actor, category=m.category, event_type=m.event_type, sim_time=m.sim_time, message=m.message)
+            for m in models
+        ]
+
     async def add_knowledge(self, item: KnowledgeChunkCreate) -> KnowledgeChunk:
         model = KnowledgeChunkModel(id=uuid.uuid4(), source_name=item.source_name, content=item.content, metadata_json=item.metadata, embedding=item.embedding)
         async with self._sessions.begin() as session:
@@ -138,12 +180,12 @@ class TaskStore:
         async with self._sessions() as session:
             if self._is_sqlite:
                 models = list((await session.scalars(select(KnowledgeChunkModel))).all())
-                models.sort(key=lambda model: -self._cosine(embedding, list(model.embedding)))
-                models = models[:limit]
+                scored = sorted(((self._cosine(embedding, list(model.embedding)), model) for model in models), key=lambda pair: -pair[0])[:limit]
             else:
-                statement = select(KnowledgeChunkModel).order_by(KnowledgeChunkModel.embedding.cosine_distance(embedding)).limit(limit)
-                models = list((await session.scalars(statement)).all())
-        records = [self._knowledge_record(model) for model in models]
+                distance = KnowledgeChunkModel.embedding.cosine_distance(embedding)
+                statement = select(KnowledgeChunkModel, distance).order_by(distance).limit(limit)
+                scored = [(1.0 - float(d), model) for model, d in (await session.execute(statement)).all()]
+        records = [self._knowledge_record(model).model_copy(update={"similarity": round(score, 4)}) for score, model in scored]
         if self._cache and cache_key:
             await self._cache.set_json(cache_key, [r.model_dump(mode="json") for r in records], ttl=300)
         return records
