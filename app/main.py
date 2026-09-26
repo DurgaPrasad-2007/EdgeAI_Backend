@@ -115,8 +115,24 @@ def allowed_hosts() -> list[str]:
     return list(dict.fromkeys(hosts))
 
 
+def allowed_origins() -> list[str]:
+    configured = os.getenv("EDGEFLEET_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+    origins = [origin.strip() for origin in configured.split(",") if origin.strip()]
+    # Ensure local development frontends can access API even when pointed to production
+    for dev_origin in ("http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"):
+        if dev_origin not in origins:
+            origins.append(dev_origin)
+    return origins
+
+
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts())
-app.add_middleware(CORSMiddleware, allow_origins=[origin.strip() for origin in os.getenv("EDGEFLEET_ALLOWED_ORIGINS", "http://localhost:3000").split(",") if origin.strip()], allow_credentials=False, allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS", "PUT"], allow_headers=["Authorization", "Content-Type", "X-Request-ID"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins(),
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS", "PUT"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+)
 
 
 @app.middleware("http")
