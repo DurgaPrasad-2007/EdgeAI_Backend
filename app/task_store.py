@@ -23,6 +23,45 @@ class TaskStore:
         self._is_sqlite = database_url.startswith("sqlite")
         self._cache = cache
 
+    @staticmethod
+    def new_id() -> str:
+        return f"TASK-{uuid.uuid4().hex[:8].upper()}"
+
+    async def commit(self, audit_rows: list[dict], ops: list[tuple]) -> None:
+        """Write-behind: persist audit rows and task changes in ONE transaction (one connection, one round trip).
+
+        ops are ("create", TaskRecord), ("update", task_id, fields) or ("delete", task_id), applied in order."""
+        if not audit_rows and not ops:
+            return
+        async with self._sessions.begin() as session:
+            if audit_rows:
+                session.add_all([AuditEventModel(**row) for row in audit_rows])
+            for op in ops:
+                if op[0] == "create":
+                    t = op[1]
+                    session.add(TaskModel(
+                        id=t.id, pickup=t.pickup, destination=t.destination, priority=t.priority, status=t.status,
+                        payload_kg=t.payload_kg, payload_size=t.payload_size, urgency=t.urgency,
+                        assigned_robot_id=t.assigned_robot_id, created_at=t.created_at,
+                    ))
+                    await session.flush()
+                elif op[0] == "update":
+                    model = await session.get(TaskModel, op[1])
+                    if model is None:
+                        continue
+                    for key, value in op[2].items():
+                        if key == "unassign":
+                            model.assigned_robot_id = None
+                        elif value is not None:
+                            setattr(model, key, value)
+                elif op[0] == "delete":
+                    model = await session.get(TaskModel, op[1])
+                    if model is not None:
+                        await session.delete(model)
+            await session.flush()
+        if self._cache and ops:
+            await self._cache.delete("edgefleet:tasks:list")
+
     async def create(
         self,
         pickup: str,
@@ -35,7 +74,7 @@ class TaskStore:
     ) -> TaskRecord:
         status: TaskStatus = "Assigned" if assigned_robot_id else "Queued"
         model = TaskModel(
-            id=f"TASK-{uuid.uuid4().hex[:8].upper()}",
+            id=self.new_id(),
             pickup=pickup,
             destination=destination,
             priority=priority,

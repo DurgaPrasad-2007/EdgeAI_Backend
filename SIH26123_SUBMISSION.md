@@ -20,6 +20,21 @@ EdgeFleet lets every AMR keep a local copy of nearby peers’ position and inten
 | Edge hardware | The coordination state machine is small, asynchronous Python and can run per robot on Raspberry Pi 5 / Jetson-class devices. PostgreSQL is audit/retrieval storage, not a safety dependency. |
 | Dashboard | Separate Next.js console shows real-time fleet state, battery, leases, collision count, event log, live task creation and completion. |
 
+## Implementation status (what the code in this repository actually does)
+
+**Implemented and tested**
+
+- **Autonomous robot agents** (`app/agents.py`): every AMR is its own asyncio task with a private control loop and a private, soft-state view of its peers built only from messages it has heard. There is no shared lock, no shared reservation table and no central planner.
+- **Peer message bus** (`PeerBus`): broadcast and direct messages, per-robot inboxes, a radio-silence switch. In-process here; the agents only see the bus interface, so a network transport can replace it.
+- **Decentralised conflict resolution**: two-node look-ahead claims; corridor C-14 is leased by claiming it on the mesh; right of way by intent (closer robot, then higher utility); a claim expires if its owner goes silent (4.8 s); mutual waits are broken by a victim every robot computes identically; dead-end swaps are resolved by a parking manoeuvre.
+- **Decentralised task allocation**: tasks are announced to the mesh, every robot bids from its own battery and distance, and the winner is decided without a dispatcher (Contract-Net). A silent robot's task is handed back by a surviving peer and finished by another.
+- **Re-routing**: a blockage is broadcast and every robot re-plans with A*; robots also detour around congestion, not only obstacles.
+- **Dashboard**: a passive observer (`FleetSim.snapshot`). It reads robot telemetry and never issues motion commands.
+- **Measured success criteria** (`app/benchmark.py`, `GET /api/benchmark`): headless, deterministic, identical assignments for both policies, 100 fixed seeds. Result: **-23.9% total mission time**, -24.3% makespan, -70.5% time spent waiting, **0 collisions** in both policies. The median saving is 20.5% and the mesh was slower than stop-and-wait in 14 of 100 runs. The seed set was fixed before measuring.
+- **Safety evidence**: 160 random-workload seeds with blockages completed with 0 collisions and no deadlock (`tests/test_mesh.py`, `tests/test_fleet.py`).
+
+**Not implemented (design intent only)**: ROS 2 / Zenoh transport, D* Lite (A* is re-run), any hardware or latency measurement, ISO 3691-4 certification, and per-robot processes on separate machines. Marketing pages that mention these describe the intended deployment, not this simulation.
+
 ## Architecture
 
 ```text

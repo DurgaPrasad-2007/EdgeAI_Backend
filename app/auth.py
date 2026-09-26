@@ -153,3 +153,33 @@ def require_roles(*allowed_roles: str):
         return identity
 
     return dependency
+
+
+async def demo_identity(request: Request, token: str | None = Depends(oauth2_scheme)) -> Identity:
+    """Identity for public landing page evaluation and demonstration endpoints.
+
+    If an authentication token is provided, validates and resolves the authenticated identity.
+    If no token is provided, permits guest access with viewer, operator, and fleet-agent
+    roles so evaluators on the landing page can interact with the digital twin seamlessly.
+    """
+    settings: Settings = request.app.state.settings
+    if not settings.auth_required:
+        identity = Identity(subject="local-development", email="local@edgefleet", roles=frozenset({"admin", "operator", "viewer", "fleet-agent"}))
+        actor_var.set(identity.email)
+        return identity
+    if token:
+        identity = await _resolve_request_identity(request, token)
+        actor_var.set(identity.email)
+        return identity
+    guest = Identity(subject="demo-evaluator", email="evaluator@edgefleet.demo", roles=frozenset({"viewer", "operator", "fleet-agent"}))
+    actor_var.set(guest.email)
+    return guest
+
+
+def require_demo_roles(*allowed_roles: str):
+    async def dependency(identity: Identity = Depends(demo_identity)) -> Identity:
+        if not identity.roles.intersection(allowed_roles):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role for this operation")
+        return identity
+
+    return dependency

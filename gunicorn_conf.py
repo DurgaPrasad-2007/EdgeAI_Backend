@@ -25,6 +25,8 @@ loglevel = os.getenv("LOG_LEVEL", "info")
 accesslog = "-"
 errorlog = "-"
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(L)ss'
+if os.path.exists("logging.conf"):
+    logconfig = "logging.conf"
 
 # Graceful restart & reload
 graceful_timeout = 30

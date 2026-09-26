@@ -37,6 +37,8 @@ class RobotState(BaseModel):
     completed: int = Field(ge=0)
     payload_capacity_kg: float = 0.0
     current_payload_kg: float = 0.0
+    decision: str = ""  # the robot's own last decision, in words (why it yielded, rerouted, won a bid...)
+    online: bool = True  # false while its radio is silent
 
 
 class FleetEvent(BaseModel):
@@ -107,6 +109,7 @@ class FleetState(BaseModel):
     robots: list[RobotState]
     tasks: list[TaskRecord] = Field(default_factory=list)
     kpis: Kpis = Field(default_factory=Kpis)
+    mode: str = "decentralized"
 
 
 class SimulationControl(BaseModel):

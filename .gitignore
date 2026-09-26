@@ -8,3 +8,5 @@ backend/data/*.db
 .env
 backend/.env
 frontend/.env.local
+logs/
+*.log

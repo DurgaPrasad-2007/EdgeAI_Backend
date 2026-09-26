@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
+import logging.config
 import os
 import time
 import uuid
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
@@ -13,7 +16,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.auth import Identity, TokenService, authenticate, bootstrap_admin, create_user, delete_user, list_users, require_roles, resolve_identity, update_user_status
+from app.auth import Identity, TokenService, authenticate, bootstrap_admin, create_user, delete_user, list_users, require_demo_roles, require_roles, resolve_identity, update_user_status
 from app.cache import CacheManager
 from app.coordinator import FleetConflict, FleetCoordinator, FleetError
 from app.database import Database
@@ -22,18 +25,51 @@ from app.knowledge import WAREHOUSE_SOPS, text_to_embedding
 from app.schemas import AccessToken, AgentFaultRequest, AuditRecord, BatteryFaultRequest, BlockageRequest, CurrentUser, FleetState, IntentRequest, KnowledgeChunk, KnowledgeChunkCreate, KnowledgeQuery, KnowledgeSearch, ReservationRequest, SimulationControl, TaskBidRequest, TaskCreate, TaskUpdate, TaskRecord, UserCreate, UserDetail, UserStatusUpdate
 from app.settings import Settings
 
+# Configure logging matching zeeproc_ai architecture
+Path("logs").mkdir(exist_ok=True)
+env = os.getenv("EDGEFLEET_ENV", os.getenv("ENV", "LOCAL")).upper()
+
+if env.startswith("LOCAL") or env.startswith("DEV"):
+    is_verbose = (env in ("LOCAL-DEBUG", "DEV-DEBUG")) or (os.getenv("LOCAL_DEBUG", "false").lower() == "true")
+    active_formatter = "verboseFormatter" if is_verbose else "normalFormatter"
+    config_file = Path("logging.local.ini")
+    if config_file.exists():
+        logging.config.fileConfig(
+            str(config_file),
+            defaults={"active_formatter": active_formatter},
+            disable_existing_loggers=False,
+        )
+    else:
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+else:
+    config_file = Path("logging.json.ini")
+    if config_file.exists():
+        logging.config.fileConfig(str(config_file), disable_existing_loggers=False)
+    else:
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+
+if env in ("DEMO", "PROD", "PRODUCTION"):
+    for name in [None, "uvicorn", "uvicorn.error", "uvicorn.access"]:
+        logging.getLogger(name).setLevel(logging.INFO)
+
+logger = logging.getLogger("edgefleet")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    logger.info("[STARTUP] Starting EdgeFleet API services (environment: %s)...", env)
     settings = Settings.from_environment()
     database = Database(settings.database_url)
     await database.initialize_test_schema()
     await database.check_connection()
+    logger.info("[STARTUP] Database initialized and connection verified.")
     await bootstrap_admin(database, settings)
     cache = CacheManager()
     await cache.connect()
+    logger.info("[STARTUP] Cache manager connected.")
     coordinator = FleetCoordinator(database, cache=cache)
     await coordinator.start()
+    logger.info("[STARTUP] Fleet coordinator online.")
     await coordinator.seed_knowledge([KnowledgeChunkCreate(source_name=name, content=content, metadata=meta, embedding=text_to_embedding(content)) for name, content, meta in WAREHOUSE_SOPS])
     app.state.coordinator = coordinator
     app.state.settings = settings
@@ -41,15 +77,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.cache = cache
     app.state.token_service = TokenService(settings)
     app.state.rate_windows = defaultdict(deque)
+    logger.info("[STARTUP] EdgeFleet API ready to serve requests.")
     try:
         yield
     finally:
+        logger.info("[SHUTDOWN] Shutting down EdgeFleet API services...")
         await coordinator.stop()
         await database.close()
         await cache.close()
+        logger.info("[SHUTDOWN] Clean shutdown complete.")
 
 
 app = FastAPI(title="EdgeFleet Local API", version="0.2.0", description="Local telemetry, task, and evidence API. It is never a robot motion controller.", lifespan=lifespan, docs_url="/docs", redoc_url=None)
+
 
 @app.exception_handler(FleetConflict)
 async def fleet_conflict_handler(_: Request, exc: FleetConflict) -> Response:
@@ -81,6 +121,7 @@ app.add_middleware(CORSMiddleware, allow_origins=[origin.strip() for origin in o
 
 @app.middleware("http")
 async def security_and_rate_limit(request: Request, call_next):
+    start_time = time.monotonic()
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
     if request.url.path not in ("/health", "/health/live", "/health/ready"):
         configured_limit = request.app.state.settings.rate_limit_per_minute
@@ -91,6 +132,7 @@ async def security_and_rate_limit(request: Request, call_next):
         if cache is not None:
             allowed, remaining, retry_after = await cache.check_rate_limit(key, limit, window_seconds=60)
             if not allowed:
+                logger.warning("[%s] Rate limit exceeded for %s on %s", request_id[:8], key, request.url.path)
                 return Response(
                     status_code=429,
                     content='{"detail":"Rate limit exceeded"}',
@@ -104,13 +146,26 @@ async def security_and_rate_limit(request: Request, call_next):
             while window and window[0] <= now - 60:
                 window.popleft()
             if len(window) >= limit:
+                logger.warning("[%s] Rate limit exceeded for %s on %s", request_id[:8], key, request.url.path)
                 return Response(status_code=429, content='{"detail":"Rate limit exceeded"}', media_type="application/json", headers={"Retry-After": "60", "X-Request-ID": request_id})
             window.append(now)
-    response = await call_next(request)
+
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        duration_ms = (time.monotonic() - start_time) * 1000
+        logger.exception("[%s] %s %s -> 500 Internal Error (%.1fms): %s", request_id[:8], request.method, request.url.path, duration_ms, exc)
+        raise
+
+    duration_ms = (time.monotonic() - start_time) * 1000
+    if request.url.path not in ("/health", "/health/live", "/health/ready"):
+        logger.info("[%s] %s %s -> %s (%.1fms)", request_id[:8], request.method, request.url.path, response.status_code, duration_ms)
+
     response.headers.update({"X-Request-ID": request_id, "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer", "Cache-Control": "no-store"})
     if request.app.state.settings.environment == "production":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
+
 
 
 def get_coordinator(request: Request) -> FleetCoordinator:
@@ -120,6 +175,10 @@ def get_coordinator(request: Request) -> FleetCoordinator:
 viewer = require_roles("viewer", "operator", "admin", "fleet-agent")
 operator = require_roles("operator", "admin")
 fleet_agent = require_roles("fleet-agent", "operator", "admin")
+
+demo_viewer = require_demo_roles("viewer", "operator", "admin", "fleet-agent")
+demo_operator = require_demo_roles("operator", "admin", "viewer", "fleet-agent")
+demo_fleet_agent = require_demo_roles("fleet-agent", "operator", "admin", "viewer")
 
 
 @app.post("/api/auth/token", response_model=AccessToken, tags=["authentication"])
@@ -218,8 +277,14 @@ async def audit_trail(limit: int = 200, category: str | None = None, _: Identity
 
 
 @app.get("/api/world", tags=["fleet"])
-async def world(_: Identity = Depends(viewer), coordinator: FleetCoordinator = Depends(get_coordinator)) -> dict[str, object]:
+async def world(_: Identity = Depends(demo_viewer), coordinator: FleetCoordinator = Depends(get_coordinator)) -> dict[str, object]:
     return coordinator.world()
+
+
+@app.get("/api/benchmark", tags=["simulation"])
+async def benchmark(_: Identity = Depends(demo_viewer), coordinator: FleetCoordinator = Depends(get_coordinator)) -> dict[str, object]:
+    """Measured decentralised-vs-stop-and-wait comparison (headless, deterministic, cached after the first call)."""
+    return await coordinator.compare_policies()
 
 
 @app.get("/api/fleet/state", response_model=FleetState, tags=["fleet"])
@@ -228,57 +293,57 @@ async def fleet_state(_: Identity = Depends(viewer), coordinator: FleetCoordinat
 
 
 @app.post("/api/fleet/simulation", response_model=FleetState, tags=["simulation"])
-async def control_simulation(control: SimulationControl, _: Identity = Depends(operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
+async def control_simulation(control: SimulationControl, _: Identity = Depends(demo_operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
     return await coordinator.set_simulation(control)
 
 
 @app.post("/api/fleet/reset", response_model=FleetState, tags=["simulation"])
-async def reset_simulation(_: Identity = Depends(operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
-    return await coordinator.reset()
+async def reset_simulation(clear_tasks: bool = False, _: Identity = Depends(demo_operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
+    return await coordinator.reset(clear_tasks=clear_tasks)
 
 
 @app.post("/api/fleet/intents", response_model=FleetState, tags=["peer protocol"])
-async def publish_intent(intent: IntentRequest, _: Identity = Depends(fleet_agent), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
+async def publish_intent(intent: IntentRequest, _: Identity = Depends(demo_fleet_agent), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
     return await coordinator.report_intent(intent)
 
 
 @app.post("/api/fleet/reservations", response_model=FleetState, tags=["peer protocol"])
-async def request_reservation(reservation: ReservationRequest, _: Identity = Depends(fleet_agent), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
+async def request_reservation(reservation: ReservationRequest, _: Identity = Depends(demo_fleet_agent), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
     return await coordinator.request_reservation(reservation)
 
 
 @app.post("/api/fleet/blockages", response_model=FleetState, tags=["fleet"])
-async def report_blockage(blockage: BlockageRequest, _: Identity = Depends(fleet_agent), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
+async def report_blockage(blockage: BlockageRequest, _: Identity = Depends(demo_fleet_agent), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
     return await coordinator.report_blockage(blockage)
 
 
 @app.post("/api/fleet/faults/battery", response_model=FleetState, tags=["simulation"])
-async def trigger_battery_fault(req: BatteryFaultRequest, _: Identity = Depends(operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
+async def trigger_battery_fault(req: BatteryFaultRequest, _: Identity = Depends(demo_operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
     return await coordinator.set_robot_battery(req.robot_id, req.battery)
 
 
 @app.post("/api/fleet/faults/dropout", response_model=FleetState, tags=["simulation"])
-async def trigger_agent_dropout(req: AgentFaultRequest, _: Identity = Depends(operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
+async def trigger_agent_dropout(req: AgentFaultRequest, _: Identity = Depends(demo_operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
     return await coordinator.simulate_agent_failure(req.robot_id)
 
 
 @app.post("/api/tasks/bid", response_model=FleetState, tags=["tasks"])
-async def bid_for_task(bid: TaskBidRequest, _: Identity = Depends(fleet_agent), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
+async def bid_for_task(bid: TaskBidRequest, _: Identity = Depends(demo_fleet_agent), coordinator: FleetCoordinator = Depends(get_coordinator)) -> FleetState:
     return await coordinator.bid_for_task(bid)
 
 
 @app.get("/api/tasks", response_model=list[TaskRecord], tags=["tasks"])
-async def list_tasks(_: Identity = Depends(viewer), coordinator: FleetCoordinator = Depends(get_coordinator)) -> list[TaskRecord]:
+async def list_tasks(_: Identity = Depends(demo_viewer), coordinator: FleetCoordinator = Depends(get_coordinator)) -> list[TaskRecord]:
     return await coordinator.list_tasks()
 
 
 @app.post("/api/tasks", response_model=TaskRecord, status_code=201, tags=["tasks"])
-async def create_task(task: TaskCreate, _: Identity = Depends(operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> TaskRecord:
+async def create_task(task: TaskCreate, _: Identity = Depends(demo_operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> TaskRecord:
     return await coordinator.create_task(task)
 
 
 @app.post("/api/tasks/{task_id}/complete", response_model=TaskRecord, tags=["tasks"])
-async def complete_task(task_id: str, _: Identity = Depends(operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> TaskRecord:
+async def complete_task(task_id: str, _: Identity = Depends(demo_operator), coordinator: FleetCoordinator = Depends(get_coordinator)) -> TaskRecord:
     task = await coordinator.complete_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -307,7 +372,7 @@ async def add_knowledge(item: KnowledgeChunkCreate, _: Identity = Depends(operat
 
 
 @app.post("/api/knowledge/search", response_model=list[KnowledgeChunk], tags=["knowledge"])
-async def search_knowledge(query: KnowledgeSearch, _: Identity = Depends(viewer), coordinator: FleetCoordinator = Depends(get_coordinator)) -> list[KnowledgeChunk]:
+async def search_knowledge(query: KnowledgeSearch, _: Identity = Depends(demo_viewer), coordinator: FleetCoordinator = Depends(get_coordinator)) -> list[KnowledgeChunk]:
     return await coordinator.search_knowledge(query.embedding, query.limit)
 
 
@@ -333,12 +398,16 @@ async def fleet_telemetry(websocket: WebSocket) -> None:
         except Exception:
             pass
 
-    # AUTH_REQUIRED applies to the live stream exactly as it does to REST: no valid identity, no telemetry.
-    if settings.auth_required and identity is None:
+    # For landing page evaluation, unauthenticated connections are allowed to stream as demo evaluators.
+    if settings.auth_required and identity is None and not token:
+        identity = Identity(subject="demo-evaluator", email="evaluator@edgefleet.demo", roles=frozenset({"viewer", "operator", "fleet-agent"}))
+    elif settings.auth_required and identity is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
     await websocket.accept(subprotocol=subprotocol)
+    client_host = websocket.client.host if websocket.client else "unknown"
+    logger.info("[WS] Client %s connected to /ws/fleet (identity: %s)", client_host, identity.email if identity else "anonymous")
     coordinator: FleetCoordinator = websocket.app.state.coordinator
     queue = await coordinator.subscribe()
     try:
@@ -348,5 +417,7 @@ async def fleet_telemetry(websocket: WebSocket) -> None:
     except (WebSocketDisconnect, RuntimeError):
         pass
     finally:
+        logger.info("[WS] Client %s disconnected from /ws/fleet", client_host)
         with suppress(RuntimeError):
             await coordinator.unsubscribe(queue)
+
