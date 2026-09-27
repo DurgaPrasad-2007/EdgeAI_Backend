@@ -1,12 +1,28 @@
+.env
+.env.*
+!.env.example
+*.env
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Databases & local stores
+data/*.db
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+logs/
+*.log
+
+# Frontend build artifacts if colocated
 frontend/node_modules/
 frontend/.next/
 frontend/tsconfig.tsbuildinfo
-backend/.venv/
-backend/__pycache__/
-backend/.pytest_cache/
-backend/data/*.db
-.env
-backend/.env
-frontend/.env.local
-logs/
-*.log
+
